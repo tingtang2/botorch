@@ -511,15 +511,16 @@ def _optimize_acqf_batch(
         batch_candidates = batch_candidates[best]
         batch_acq_values = batch_acq_values[best]
 
-        if batch_origins is not None:
-            best_origin_code = batch_origins[best].item()
-            origin_map = {
-                0: "SOBOL",
-                1: "sample_around_best",
-            }
-            best_origin = origin_map.get(best_origin_code, "unknown")
-            logger.info(
-                f"Best candidate originated from '{best_origin}' samples.")
+        best_origin = batch_origins[best].item()
+        # if batch_origins is not None:
+        # best_origin_code = batch_origins[best].item()
+        # origin_map = {
+        #     0: "SOBOL",
+        #     1: "sample_around_best",
+        # }
+        # best_origin = origin_map.get(best_origin_code, "unknown")
+        # logger.info(
+        #     f"Best candidate originated from '{best_origin}' samples.")
 
     if not opt_inputs.full_tree:
         batch_candidates = opt_inputs.acq_function.extract_candidates(
