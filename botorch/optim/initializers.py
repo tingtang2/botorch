@@ -3,7 +3,6 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
 r"""
 References
 
@@ -70,9 +69,9 @@ TGenInitialConditions = Callable[
 ]
 
 
-def transform_constraints(
-    constraints: list[tuple[Tensor, Tensor, float]] | None, q: int, d: int
-) -> list[tuple[Tensor, Tensor, float]] | None:
+def transform_constraints(constraints: list[tuple[Tensor, Tensor, float]]
+                          | None, q: int,
+                          d: int) -> list[tuple[Tensor, Tensor, float]] | None:
     r"""Transform constraints to sample from a d*q-dimensional space instead of a
     d-dimensional state.
 
@@ -105,8 +104,8 @@ def transform_constraints(
 
 
 def transform_intra_point_constraint(
-    constraint: tuple[Tensor, Tensor, float], d: int, q: int
-) -> list[tuple[Tensor, Tensor, float]]:
+        constraint: tuple[Tensor, Tensor, float], d: int,
+        q: int) -> list[tuple[Tensor, Tensor, float]]:
     r"""Transforms an intra-point/pointwise constraint from
     d-dimensional space to a d*q-dimesional space.
 
@@ -128,23 +127,18 @@ def transform_intra_point_constraint(
     indices, coefficients, rhs = constraint
     if indices.max() >= d:
         raise ValueError(
-            f"Constraint indices cannot exceed the problem dimension {d=}."
-        )
-    return [
-        (
-            torch.tensor(
-                [i * d + j for j in indices], dtype=torch.int64, device=indices.device
-            ),
-            coefficients,
-            rhs,
-        )
-        for i in range(q)
-    ]
+            f"Constraint indices cannot exceed the problem dimension {d=}.")
+    return [(
+        torch.tensor([i * d + j for j in indices],
+                     dtype=torch.int64,
+                     device=indices.device),
+        coefficients,
+        rhs,
+    ) for i in range(q)]
 
 
-def transform_inter_point_constraint(
-    constraint: tuple[Tensor, Tensor, float], d: int
-) -> tuple[Tensor, Tensor, float]:
+def transform_inter_point_constraint(constraint: tuple[Tensor, Tensor, float],
+                                     d: int) -> tuple[Tensor, Tensor, float]:
     r"""Transforms an inter-point constraint from
     d-dimensional space to a d*q dimesional space.
 
@@ -166,12 +160,11 @@ def transform_inter_point_constraint(
     indices, coefficients, rhs = constraint
     if indices[:, 1].max() >= d:
         raise ValueError(
-            f"Constraint indices cannot exceed the problem dimension {d=}."
-        )
+            f"Constraint indices cannot exceed the problem dimension {d=}.")
     return (
-        torch.tensor(
-            [r[0] * d + r[1] for r in indices], dtype=torch.int64, device=indices.device
-        ),
+        torch.tensor([r[0] * d + r[1] for r in indices],
+                     dtype=torch.int64,
+                     device=indices.device),
         coefficients,
         rhs,
     )
@@ -211,20 +204,18 @@ def sample_q_batches_from_polytope(
     # check if inter-point constraints are present
     inter_point = any(
         len(indices.shape) > 1
-        for constraints in (inequality_constraints or [], equality_constraints or [])
-        for indices, _, _ in constraints
-    )
+        for constraints in (inequality_constraints or [],
+                            equality_constraints or [])
+        for indices, _, _ in constraints)
 
     if inter_point:
         samples = get_polytope_samples(
             n=n,
             bounds=torch.hstack([bounds for _ in range(q)]),
             inequality_constraints=transform_constraints(
-                constraints=inequality_constraints, q=q, d=bounds.shape[1]
-            ),
+                constraints=inequality_constraints, q=q, d=bounds.shape[1]),
             equality_constraints=transform_constraints(
-                constraints=equality_constraints, q=q, d=bounds.shape[1]
-            ),
+                constraints=equality_constraints, q=q, d=bounds.shape[1]),
             seed=seed,
             n_burnin=n_burnin,
             n_thinning=n_thinning * q,
@@ -254,7 +245,7 @@ def gen_batch_initial_conditions(
     equality_constraints: list[tuple[Tensor, Tensor, float]] | None = None,
     generator: Callable[[int, int, int | None], Tensor] | None = None,
     fixed_X_fantasies: Tensor | None = None,
-) -> Tensor:
+) -> tuple[Tensor, Tensor]:
     r"""Generate a batch of initial conditions for random-restart optimziation.
 
     TODO: Support t-batches of initial conditions.
@@ -308,24 +299,20 @@ def gen_batch_initial_conditions(
     if bounds.isinf().any():
         raise NotImplementedError(
             "Currently only finite values in `bounds` are supported "
-            "for generating initial conditions for optimization."
-        )
+            "for generating initial conditions for optimization.")
     options = options or {}
     sample_around_best = options.get("sample_around_best", False)
     if sample_around_best and equality_constraints:
         raise UnsupportedError(
             "Option 'sample_around_best' is not supported when equality"
-            "constraints are present."
-        )
+            "constraints are present.")
     if sample_around_best and generator:
         raise UnsupportedError(
             "Option 'sample_around_best' is not supported when custom "
-            "generator is be used."
-        )
+            "generator is be used.")
     seed: int | None = options.get("seed")
-    batch_limit: int | None = options.get(
-        "init_batch_limit", options.get("batch_limit")
-    )
+    batch_limit: int | None = options.get("init_batch_limit",
+                                          options.get("batch_limit"))
     factor, max_factor = 1, 5
     init_kwargs = {}
     device = bounds.device
@@ -368,16 +355,22 @@ def gen_batch_initial_conditions(
             # check if no constraints are provided
             elif not (inequality_constraints or equality_constraints):
                 if effective_dim <= SobolEngine.MAXDIM:
-                    X_rnd = draw_sobol_samples(bounds=bounds_cpu, n=n, q=q, seed=seed)
+                    X_rnd = draw_sobol_samples(bounds=bounds_cpu,
+                                               n=n,
+                                               q=q,
+                                               seed=seed)
+                    origins = torch.zeros(X_rnd.shape[0], dtype=torch.long)
                 else:
                     with manual_seed(seed):
                         # load on cpu
-                        X_rnd_nlzd = torch.rand(
-                            n, q, bounds_cpu.shape[-1], dtype=bounds.dtype
-                        )
-                    X_rnd = unnormalize(
-                        X_rnd_nlzd, bounds_cpu, update_constant_bounds=False
-                    )
+                        X_rnd_nlzd = torch.rand(n,
+                                                q,
+                                                bounds_cpu.shape[-1],
+                                                dtype=bounds.dtype)
+                    X_rnd = unnormalize(X_rnd_nlzd,
+                                        bounds_cpu,
+                                        update_constant_bounds=False)
+                    origins = torch.zeros(X_rnd.shape[0], dtype=torch.long)
             else:
                 X_rnd = sample_q_batches_from_polytope(
                     n=n,
@@ -397,10 +390,15 @@ def gen_batch_initial_conditions(
                     n_discrete_points=n * q,
                     sigma=options.get("sample_around_best_sigma", 1e-3),
                     bounds=bounds,
-                    subset_sigma=options.get("sample_around_best_subset_sigma", 1e-1),
-                    prob_perturb=options.get("sample_around_best_prob_perturb"),
+                    subset_sigma=options.get("sample_around_best_subset_sigma",
+                                             1e-1),
+                    prob_perturb=options.get(
+                        "sample_around_best_prob_perturb"),
                 )
                 if X_best_rnd is not None:
+                    origins_best = torch.ones(
+                        X_best_rnd.view(-1, q, bounds.shape[-1]).shape[0],
+                        dtype=torch.long)  # 1 for sample_around_best
                     X_rnd = torch.cat(
                         [
                             X_rnd,
@@ -408,25 +406,26 @@ def gen_batch_initial_conditions(
                         ],
                         dim=0,
                     )
+                    origins = torch.cat([origins, origins_best], dim=0)
+
             # Keep X on CPU for consistency & to limit GPU memory usage.
-            X_rnd = fix_features(
-                X_rnd, fixed_features=fixed_features, replace_current_value=True
-            ).cpu()
+            X_rnd = fix_features(X_rnd,
+                                 fixed_features=fixed_features,
+                                 replace_current_value=True).cpu()
 
             # Append the fixed fantasies to the randomly generated points
             if fixed_X_fantasies is not None:
-                if (d_f := fixed_X_fantasies.shape[-1]) != (d_r := X_rnd.shape[-1]):
+                if (d_f := fixed_X_fantasies.shape[-1]) != (d_r :=
+                                                            X_rnd.shape[-1]):
                     raise BotorchTensorDimensionError(
                         "`fixed_X_fantasies` and `bounds` must both have the same "
                         f"trailing dimension `d`, but have {d_f} and {d_r}, "
-                        "respectively."
-                    )
+                        "respectively.")
                 X_rnd = torch.cat(
                     [
                         X_rnd,
-                        fixed_X_fantasies.cpu()
-                        .unsqueeze(0)
-                        .expand(X_rnd.shape[0], *fixed_X_fantasies.shape),
+                        fixed_X_fantasies.cpu().unsqueeze(0).expand(
+                            X_rnd.shape[0], *fixed_X_fantasies.shape),
                     ],
                     dim=-2,
                 )
@@ -447,14 +446,20 @@ def gen_batch_initial_conditions(
                 )
 
             # Downselect the initial conditions based on the acquisition function values
-            batch_initial_conditions, _ = init_func(
-                X=X_rnd, acq_vals=acq_vals, n=num_restarts, **init_kwargs
-            )
-            batch_initial_conditions = batch_initial_conditions.to(device=device)
+            batch_initial_conditions, _, idcs = init_func(X=X_rnd,
+                                                          acq_vals=acq_vals,
+                                                          n=num_restarts,
+                                                          **init_kwargs)
+            batch_initial_conditions = batch_initial_conditions.to(
+                device=device)
+
+            selected_origins = origins[idcs]
 
             # Return the initial conditions if no warnings were raised
-            if not any(issubclass(w.category, BadInitialCandidatesWarning) for w in ws):
-                return batch_initial_conditions
+            if not any(
+                    issubclass(w.category, BadInitialCandidatesWarning)
+                    for w in ws):
+                return batch_initial_conditions, selected_origins
 
             if factor < max_factor:
                 factor += 1
@@ -467,7 +472,9 @@ def gen_batch_initial_conditions(
         BadInitialCandidatesWarning,
         stacklevel=2,
     )
-    return batch_initial_conditions
+    random_indices = torch.randperm(n=X_rnd.shape[0],
+                                    device=X_rnd.device)[:num_restarts]
+    return batch_initial_conditions, random_indices
 
 
 def gen_one_shot_kg_initial_conditions(
@@ -539,8 +546,7 @@ def gen_one_shot_kg_initial_conditions(
     frac_random: float = options.get("frac_random", 0.1)
     if not 0 < frac_random < 1:
         raise ValueError(
-            f"frac_random must take on values in (0,1). Value: {frac_random}"
-        )
+            f"frac_random must take on values in (0,1). Value: {frac_random}")
     q_aug = acq_function.get_augmented_q_batch_size(q=q)
 
     # Check for inter-point (in)equality constraints
@@ -555,8 +561,7 @@ def gen_one_shot_kg_initial_conditions(
                         "Indices must be one-dimensional "
                         "in gen_one_shot_kg_initial_conditions. "
                         f"Received indices {indices} "
-                        f"for {type_of_constraints} constrained."
-                    )
+                        f"for {type_of_constraints} constrained.")
 
     # TODO: Avoid unnecessary computation by not generating all candidates
     ics = gen_batch_initial_conditions(
@@ -602,7 +607,8 @@ def gen_one_shot_kg_initial_conditions(
         replacement=True,
     )
     # set the respective initial conditions to the sampled optimizers
-    ics[..., -n_value:, :] = fantasy_cands[idx, 0].view(num_restarts, n_value, -1)
+    ics[..., -n_value:, :] = fantasy_cands[idx,
+                                           0].view(num_restarts, n_value, -1)
     return ics
 
 
@@ -681,8 +687,7 @@ def gen_one_shot_hvkg_initial_conditions(
     frac_random: float = options.get("frac_random", 0.1)
     if not 0 < frac_random < 1:
         raise ValueError(
-            f"frac_random must take on values in (0,1). Value: {frac_random}"
-        )
+            f"frac_random must take on values in (0,1). Value: {frac_random}")
 
     value_function = _get_hv_value_function(
         model=acq_function.model,
@@ -692,10 +697,12 @@ def gen_one_shot_hvkg_initial_conditions(
         use_posterior_mean=acq_function.use_posterior_mean,
     )
 
-    is_mf_hvkg = isinstance(acq_function, qMultiFidelityHypervolumeKnowledgeGradient)
+    is_mf_hvkg = isinstance(acq_function,
+                            qMultiFidelityHypervolumeKnowledgeGradient)
     if is_mf_hvkg:
         dim = bounds.shape[-1]
-        fidelity_dims, fidelity_targets = zip(*acq_function.target_fidelities.items())
+        fidelity_dims, fidelity_targets = zip(
+            *acq_function.target_fidelities.items())
         value_function = FixedFeatureAcquisitionFunction(
             acq_function=value_function,
             d=dim,
@@ -732,9 +739,9 @@ def gen_one_shot_hvkg_initial_conditions(
         if is_mf_hvkg:
             # add fixed features
             optim_ics = value_function._construct_X_full(optim_ics)
-        optim_ics = optim_ics.reshape(
-            num_optim_restarts, acq_function.num_pseudo_points, bounds.shape[-1]
-        )
+        optim_ics = optim_ics.reshape(num_optim_restarts,
+                                      acq_function.num_pseudo_points,
+                                      bounds.shape[-1])
 
     # get random initial conditions
     num_random_restarts = num_restarts - num_optim_restarts
@@ -754,14 +761,13 @@ def gen_one_shot_hvkg_initial_conditions(
 
         if num_optim_restarts > 0:
             probs = torch.full(
-                (num_restarts,),
+                (num_restarts, ),
                 1.0 / num_restarts,
                 dtype=optim_ics.dtype,
                 device=optim_ics.device,
             )
-            optim_idxr = probs.multinomial(
-                num_samples=num_optim_restarts, replacement=False
-            )
+            optim_idxr = probs.multinomial(num_samples=num_optim_restarts,
+                                           replacement=False)
             base_ics[optim_idxr, q:] = optim_ics
     else:
         # optim_ics is num_restarts x num_pseudo_points x d
@@ -799,7 +805,7 @@ def gen_one_shot_hvkg_initial_conditions(
                 )
             else:
                 # ics are all randomly sampled
-                ics = base_ics[i : i + 1]
+                ics = base_ics[i:i + 1]
             all_ics.append(ics)
         return torch.cat(all_ics, dim=0)
 
@@ -873,8 +879,7 @@ def gen_value_function_initial_conditions(
     frac_random: float = options.get("frac_random", 0.6)
     if not 0 < frac_random < 1:
         raise ValueError(
-            f"frac_random must take on values in (0,1). Value: {frac_random}"
-        )
+            f"frac_random must take on values in (0,1). Value: {frac_random}")
 
     # compute maximizer of the current value function
     value_function = _get_value_function(
@@ -897,8 +902,8 @@ def gen_value_function_initial_conditions(
         options={
             k: v
             for k, v in options.items()
-            if k
-            not in ("frac_random", "num_inner_restarts", "raw_inner_samples", "eta")
+            if k not in ("frac_random", "num_inner_restarts",
+                         "raw_inner_samples", "eta")
         },
     )
 
@@ -923,29 +928,33 @@ def gen_value_function_initial_conditions(
             device=fantasy_cands.device,
         )
     # add qMC samples
-    randomized = draw_sobol_samples(
-        bounds=bounds, n=raw_samples - n_value, q=1, batch_shape=batch_shape, seed=seed
-    ).to(resampled)
+    randomized = draw_sobol_samples(bounds=bounds,
+                                    n=raw_samples - n_value,
+                                    q=1,
+                                    batch_shape=batch_shape,
+                                    seed=seed).to(resampled)
     # full set of raw samples
     X_rnd = torch.cat([resampled, randomized], dim=0)
-    X_rnd = fix_features(
-        X_rnd, fixed_features=fixed_features, replace_current_value=True
-    )
+    X_rnd = fix_features(X_rnd,
+                         fixed_features=fixed_features,
+                         replace_current_value=True)
 
     # evaluate the raw samples
     with torch.no_grad():
         acq_vals = acq_function(X_rnd)
 
     # select the restart points using the heuristic
-    X_init, _ = initialize_q_batch(
-        X=X_rnd, acq_vals=acq_vals, n=num_restarts, eta=options.get("eta", 2.0)
-    )
+    X_init, _ = initialize_q_batch(X=X_rnd,
+                                   acq_vals=acq_vals,
+                                   n=num_restarts,
+                                   eta=options.get("eta", 2.0))
     return X_init
 
 
-def initialize_q_batch(
-    X: Tensor, acq_vals: Tensor, n: int, eta: float = 1.0
-) -> tuple[Tensor, Tensor]:
+def initialize_q_batch(X: Tensor,
+                       acq_vals: Tensor,
+                       n: int,
+                       eta: float = 1.0) -> tuple[Tensor, Tensor, Tensor]:
     r"""Heuristic for selecting initial conditions for candidate generation.
 
     This heuristic selects points from `X` (without replacement) with probability
@@ -982,12 +991,10 @@ def initialize_q_batch(
     n_samples = X.shape[0]
     batch_shape = X.shape[1:-2] or torch.Size()
     if n > n_samples:
-        raise RuntimeError(
-            f"n ({n}) cannot be larger than the number of "
-            f"provided samples ({n_samples})"
-        )
+        raise RuntimeError(f"n ({n}) cannot be larger than the number of "
+                           f"provided samples ({n_samples})")
     elif n == n_samples:
-        return X, acq_vals
+        return X, acq_vals, idcs
 
     Ystd = acq_vals.std(dim=0)
     if torch.any(Ystd == 0):
@@ -998,11 +1005,12 @@ def initialize_q_batch(
             stacklevel=3,
         )
         idcs = torch.randperm(n=n_samples, device=X.device)[:n]
-        return X[idcs], acq_vals[idcs]
+        return X[idcs], acq_vals[idcs], idcs
 
     max_val, max_idx = torch.max(acq_vals, dim=0)
     idcs = boltzmann_sample(
-        acq_vals.permute(*range(1, len(batch_shape) + 1), 0),
+        acq_vals.permute(*range(1,
+                                len(batch_shape) + 1), 0),
         num_samples=n,
         eta=eta,
     ).permute(-1, *range(len(batch_shape)))
@@ -1016,18 +1024,21 @@ def initialize_q_batch(
         idcs[-1, ~has_max] = max_idx[~has_max]
 
     if batch_shape == torch.Size():
-        return X[idcs], acq_vals[idcs]
+        return X[idcs], acq_vals[idcs], idcs
     else:
-        X_select = X.gather(
-            dim=0, index=idcs.view(*idcs.shape, 1, 1).expand(n, *X.shape[1:])
-        )
+        X_select = X.gather(dim=0,
+                            index=idcs.view(*idcs.shape, 1,
+                                            1).expand(n, *X.shape[1:]))
         acq_select = acq_vals.gather(dim=0, index=idcs)
-        return X_select, acq_select
+        return X_select, acq_select, idcs
 
 
-def initialize_q_batch_nonneg(
-    X: Tensor, acq_vals: Tensor, n: int, eta: float = 1.0, alpha: float = 1e-4
-) -> tuple[Tensor, Tensor]:
+def initialize_q_batch_nonneg(X: Tensor,
+                              acq_vals: Tensor,
+                              n: int,
+                              eta: float = 1.0,
+                              alpha: float = 1e-4
+                              ) -> tuple[Tensor, Tensor, Tensor]:
     r"""Heuristic for selecting initial conditions for non-neg. acquisition functions.
 
     This function is similar to `initialize_q_batch`, but designed specifically
@@ -1062,7 +1073,8 @@ def initialize_q_batch_nonneg(
     """
     n_samples = X.shape[0]
     if n > n_samples:
-        raise RuntimeError("n cannot be larger than the number of provided samples")
+        raise RuntimeError(
+            "n cannot be larger than the number of provided samples")
     elif n == n_samples:
         return X, acq_vals
 
@@ -1075,7 +1087,7 @@ def initialize_q_batch_nonneg(
             stacklevel=3,
         )
         idcs = torch.randperm(n=n_samples, device=X.device)[:n]
-        return X[idcs], acq_vals[idcs]
+        return X[idcs], acq_vals[idcs], idcs
 
     # make sure there are at least `n` points with positive acquisition values
     pos = acq_vals > 0
@@ -1084,29 +1096,33 @@ def initialize_q_batch_nonneg(
         # select all positive points and then fill remaining quota with randomly
         # selected points
         remaining_indices = (~pos).nonzero(as_tuple=False).view(-1)
-        rand_indices = torch.randperm(
-            remaining_indices.shape[0], device=acq_vals.device
-        )
-        sampled_remaining_indices = remaining_indices[rand_indices[: n - num_pos]]
+        rand_indices = torch.randperm(remaining_indices.shape[0],
+                                      device=acq_vals.device)
+        sampled_remaining_indices = remaining_indices[rand_indices[:n -
+                                                                   num_pos]]
         pos[sampled_remaining_indices] = 1
-        return X[pos], acq_vals[pos]
+        return X[pos], acq_vals[pos], idcs
     # select points within alpha of max_val, iteratively decreasing alpha by a
     # factor of 10 as necessary
     alpha_pos = acq_vals >= alpha * max_val
     while alpha_pos.sum() < n:
         alpha = 0.1 * alpha
         alpha_pos = acq_vals >= alpha * max_val
-    alpha_pos_idcs = torch.arange(len(acq_vals), device=acq_vals.device)[alpha_pos]
+    alpha_pos_idcs = torch.arange(len(acq_vals),
+                                  device=acq_vals.device)[alpha_pos]
     weights = torch.exp(eta * (acq_vals[alpha_pos] / max_val - 1))
     idcs = alpha_pos_idcs[torch.multinomial(weights, n)]
     if max_idx not in idcs:
         idcs[-1] = max_idx
-    return X[idcs], acq_vals[idcs]
+    return X[idcs], acq_vals[idcs], idcs
 
 
 def initialize_q_batch_topn(
-    X: Tensor, acq_vals: Tensor, n: int, largest: bool = True, sorted: bool = True
-) -> tuple[Tensor, Tensor]:
+        X: Tensor,
+        acq_vals: Tensor,
+        n: int,
+        largest: bool = True,
+        sorted: bool = True) -> tuple[Tensor, Tensor, Tensor]:
     r"""Take the top `n` initial conditions for candidate generation.
 
     Args:
@@ -1132,10 +1148,8 @@ def initialize_q_batch_topn(
     """
     n_samples = X.shape[0]
     if n > n_samples:
-        raise RuntimeError(
-            f"n ({n}) cannot be larger than the number of "
-            f"provided samples ({n_samples})"
-        )
+        raise RuntimeError(f"n ({n}) cannot be larger than the number of "
+                           f"provided samples ({n_samples})")
     elif n == n_samples:
         return X, acq_vals
 
@@ -1148,10 +1162,10 @@ def initialize_q_batch_topn(
             stacklevel=3,
         )
         idcs = torch.randperm(n=n_samples, device=X.device)[:n]
-        return X[idcs], acq_vals[idcs]
+        return X[idcs], acq_vals[idcs], idcs
 
     topk_out, topk_idcs = acq_vals.topk(n, largest=largest, sorted=sorted)
-    return X[topk_idcs], topk_out
+    return X[topk_idcs], topk_out, idcs
 
 
 def sample_points_around_best(
@@ -1212,8 +1226,8 @@ def sample_points_around_best(
             constraints = acq_function.constraints
             if constraints is not None:
                 neg_violation = -torch.stack(
-                    [c(mean).clamp_min(0.0) for c in constraints], dim=-1
-                ).sum(dim=-1)
+                    [c(mean).clamp_min(0.0)
+                     for c in constraints], dim=-1).sum(dim=-1)
                 feas = neg_violation == 0
                 if feas.any():
                     f_pred[~feas] = float("-inf")
@@ -1235,9 +1249,8 @@ def sample_points_around_best(
             best_idcs = torch.topk(f_pred, n_best).indices.view(-1)
             best_X = X[best_idcs]
     use_perturbed_sampling = best_X.shape[-1] >= 20 or prob_perturb is not None
-    n_trunc_normal_points = (
-        n_discrete_points // 2 if use_perturbed_sampling else n_discrete_points
-    )
+    n_trunc_normal_points = (n_discrete_points // 2
+                             if use_perturbed_sampling else n_discrete_points)
     perturbed_X = sample_truncated_normal_perturbations(
         X=best_X,
         n_discrete_points=n_trunc_normal_points,
