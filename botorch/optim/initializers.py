@@ -52,21 +52,18 @@ from botorch.utils.transforms import unnormalize
 from torch import Tensor
 from torch.quasirandom import SobolEngine
 
-TGenInitialConditions = Callable[
-    [
-        # reasoning behind this annotation: contravariance
-        qKnowledgeGradient,
-        Tensor,
-        int,
-        int,
-        int,
-        Optional[dict[int, float]],
-        Optional[dict[str, Union[bool, float, int]]],
-        Optional[list[tuple[Tensor, Tensor, float]]],
-        Optional[list[tuple[Tensor, Tensor, float]]],
-    ],
-    Optional[Tensor],
-]
+TGenInitialConditions = Callable[[
+    # reasoning behind this annotation: contravariance
+    qKnowledgeGradient,
+    Tensor,
+    int,
+    int,
+    int,
+    Optional[dict[int, float]],
+    Optional[dict[str, Union[bool, float, int]]],
+    Optional[list[tuple[Tensor, Tensor, float]]],
+    Optional[list[tuple[Tensor, Tensor, float]]],
+], Optional[Tensor], ]
 
 
 def transform_constraints(constraints: list[tuple[Tensor, Tensor, float]]
@@ -385,7 +382,7 @@ def gen_batch_initial_conditions(
 
             # sample additional points around best
             if sample_around_best:
-                X_best_rnd = sample_points_around_best(
+                best_points_tuple = sample_points_around_best(
                     acq_function=acq_function,
                     n_discrete_points=n * q,
                     sigma=options.get("sample_around_best_sigma", 1e-3),
@@ -395,10 +392,8 @@ def gen_batch_initial_conditions(
                     prob_perturb=options.get(
                         "sample_around_best_prob_perturb"),
                 )
-                if X_best_rnd is not None:
-                    origins_best = torch.ones(
-                        X_best_rnd.view(-1, q, bounds.shape[-1]).shape[0],
-                        dtype=torch.long)  # 1 for sample_around_best
+                if best_points_tuple is not None:
+                    X_best_rnd, origins_best = best_points_tuple
                     X_rnd = torch.cat(
                         [
                             X_rnd,
@@ -1176,7 +1171,7 @@ def sample_points_around_best(
     best_pct: float = 5.0,
     subset_sigma: float = 1e-1,
     prob_perturb: float | None = None,
-) -> Tensor | None:
+) -> tuple[Tensor, Tensor] | None:
     r"""Find best points and sample nearby points.
 
     Args:
@@ -1257,6 +1252,8 @@ def sample_points_around_best(
         sigma=sigma,
         bounds=bounds,
     )
+    # Origin code 1 for perturbing all dims
+    origins = torch.full((perturbed_X.shape[0], ), 1, dtype=torch.long)
     if use_perturbed_sampling:
         perturbed_subset_dims_X = sample_perturbed_subset_dims(
             X=best_X,
@@ -1266,11 +1263,20 @@ def sample_points_around_best(
             sigma=sigma,
             prob_perturb=prob_perturb,
         )
+        # Origin code 2 for perturbing a subset of dims
+        origins_subset = torch.full((perturbed_subset_dims_X.shape[0], ),
+                                    2,
+                                    dtype=torch.long)
+
         perturbed_X = torch.cat([perturbed_X, perturbed_subset_dims_X], dim=0)
-        # shuffle points
+        origins = torch.cat([origins, origins_subset], dim=0)
+
+        # shuffle points and origins together
         perm = torch.randperm(perturbed_X.shape[0], device=X.device)
         perturbed_X = perturbed_X[perm]
-    return perturbed_X
+        origins = origins[perm]
+
+    return perturbed_X, origins
 
 
 def is_nonnegative(acq_function: AcquisitionFunction) -> bool:
